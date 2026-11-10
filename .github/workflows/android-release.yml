@@ -29,12 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # AGP 9 requires at least JDK 17 to run (the pinned jdk in gradle/tools.versions.toml matches);
-      # the Kotlin/JNI code itself targets Java 11. Gradle 9.4 reads this fine.
+      # JDK 21, not the 17 in gradle/tools.versions.toml (nothing in Gradle reads that pin): unit
+      # tests run on this JVM, and java.text.BreakIterator only splits emoji ZWJ sequences as one
+      # character from JDK 20 on, which SelectionMetricsTest asserts. The app still targets Java 11.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - uses: gradle/actions/setup-gradle@v4
 
