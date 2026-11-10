@@ -940,16 +940,11 @@ object ProviderRegistry {
      * defined because its id is referenced across the codebase and stored accounts may still carry
      * it — but [byId] reads this list, so it resolves like any unknown id: to the caller's fallback.
      */
-    val presets: List<ProviderPreset> =
-        if (DICTATE_CLOUD_ENABLED) listOf(
-            CLOUD, OPENAI, GROQ, OPENROUTER, GEMINI, ANTHROPIC, TOGETHER, DEEPINFRA, MISTRAL, SONIOX,
-            ELEVENLABS, DEEPGRAM, ASSEMBLYAI, AZURE, XAI, DEEPSEEK, SILICONFLOW, SCALEWAY, OVHCLOUD,
-            OLLAMA, LOCAL,
-        ) else listOf(
-            OPENAI, GROQ, OPENROUTER, GEMINI, ANTHROPIC, TOGETHER, DEEPINFRA, MISTRAL, SONIOX,
-            ELEVENLABS, DEEPGRAM, ASSEMBLYAI, AZURE, XAI, DEEPSEEK, SILICONFLOW, SCALEWAY, OVHCLOUD,
-            OLLAMA, LOCAL,
-        )
+    val presets: List<ProviderPreset> = listOf(
+        CLOUD, OPENAI, GROQ, OPENROUTER, GEMINI, ANTHROPIC, TOGETHER, DEEPINFRA, MISTRAL, SONIOX,
+        ELEVENLABS, DEEPGRAM, ASSEMBLYAI, AZURE, XAI, DEEPSEEK, SILICONFLOW, SCALEWAY, OVHCLOUD,
+        OLLAMA, LOCAL,
+    ).filter { DICTATE_CLOUD_ENABLED || it !== CLOUD } // fork: one filter, so the upstream list merges as is
 
     fun byId(id: String): ProviderPreset? = presets.firstOrNull { it.id == id }
 
