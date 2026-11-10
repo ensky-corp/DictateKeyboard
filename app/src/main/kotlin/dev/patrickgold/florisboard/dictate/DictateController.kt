@@ -1258,7 +1258,9 @@ object DictateController {
         // Dictate Cloud running out of credit is checked first, and before the resend branches: it is
         // classified as QUOTA_EXCEEDED like every other provider's rate limit, but unlike those it is
         // neither worth retrying nor something to go and fix at a provider. Buying more is a button.
-        val outOfCredit = e.code == DictateCloudApi.ErrorCode.INSUFFICIENT_CREDITS
+        // Disqualified on the switch: a build without the credit service would otherwise point at a
+        // top-up screen it does not have.
+        val outOfCredit = ProviderRegistry.DICTATE_CLOUD_ENABLED && e.code == DictateCloudApi.ErrorCode.INSUFFICIENT_CREDITS
         val action = when {
             outOfCredit -> ErrorAction.TOP_UP
             canResend && e.kind in EXPORTABLE_ERROR_KINDS -> ErrorAction.SAVE_AUDIO
@@ -4377,6 +4379,8 @@ object DictateController {
      * keyboard wait on the network. Running out entirely is caught anyway, by the 402 that follows.
      */
     private fun maybeWarnLowCredit(): Boolean {
+        // The switch comes before the wallet check: this fork offers no credit service to be low on.
+        if (!ProviderRegistry.DICTATE_CLOUD_ENABLED) return false
         if (prefs.dictate.transcriptionProviderId.get() != ProviderRegistry.CLOUD.id) return false
         val account = prefs.dictate.providerAccounts.get().getOrEmpty(ProviderRegistry.CLOUD.id)
         if (!account.hasWallet) return false
@@ -5317,7 +5321,9 @@ object DictateController {
      * learns from the server whether the account was deleted or this device was signed out.
      */
     private fun missingCredentialError(context: Context, account: ProviderAccount): UiState.Error =
-        if (account.providerId == ProviderRegistry.CLOUD.id) {
+        // On this fork the credit screen is part of nothing the user can reach, so the cloud branch
+        // would point them at a dead end; the provider-settings wording answers those stragglers.
+        if (ProviderRegistry.DICTATE_CLOUD_ENABLED && account.providerId == ProviderRegistry.CLOUD.id) {
             UiState.Error(
                 message = context.getString(R.string.dictate__error_cloud_no_account),
                 kind = DictateApiException.Kind.INVALID_API_KEY,

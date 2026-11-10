@@ -105,13 +105,22 @@ import dev.patrickgold.florisboard.lib.FlorisLocale
 
 object Restore {
     const val MIN_VERSION_CODE = 64
-    // Dictate's own application id (base, without the .debug/.beta variant suffixes) — a backup whose
-    // metadata package starts with this is a genuine Dictate backup, not a "third-party" one. Was still
-    // the upstream FlorisBoard id after the fork, which made every Dictate backup falsely warn.
-    const val PACKAGE_NAME = "net.devemperor.dictate"
+    // Package ids behind which a backup counts as genuinely Dictate, not a "different vendor": the
+    // upstream Play app — the migration path this fork keeps open — and this fork's own id. The
+    // fork's id is computed from the build-time applicationId with the variant suffixes stripped,
+    // so the check reads exactly what this build writes (BackupScreen builds its metadata from the
+    // same BuildConfig) instead of a second copy of the id that could drift when the fork renames
+    // its application id again.
+    const val UPSTREAM_PACKAGE_NAME = "net.devemperor.dictate"
+    val OWN_PACKAGE_NAME: String =
+        BuildConfig.APPLICATION_ID.removeSuffix(".debug").removeSuffix(".beta").removeSuffix(".bench")
     const val BACKUP_ARCHIVE_FILE_NAME = "backup.zip"
     // The plain archive inside a password-protected one (issue #470), deleted again once it is unpacked.
     const val DECRYPTED_ARCHIVE_FILE_NAME = "decrypted_backup.zip"
+
+    /** True when [packageName] is one whose backups this build accepts without a vendor warning. */
+    fun isKnownVendorPackage(packageName: String): Boolean =
+        packageName.startsWith(UPSTREAM_PACKAGE_NAME) || packageName.startsWith(OWN_PACKAGE_NAME)
 }
 
 /**
@@ -131,7 +140,7 @@ private fun CacheManager.BackupAndRestoreWorkspace.readArchive(archive: FsFile) 
         metadata.versionCode != BuildConfig.VERSION_CODE -> {
             R.string.backup_and_restore__restore__metadata_warn_different_version
         }
-        !metadata.packageName.startsWith(Restore.PACKAGE_NAME) -> {
+        !Restore.isKnownVendorPackage(metadata.packageName) -> {
             R.string.backup_and_restore__restore__metadata_warn_different_vendor
         }
         else -> null

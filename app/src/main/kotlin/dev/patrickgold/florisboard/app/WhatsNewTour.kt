@@ -15,6 +15,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.patrickgold.florisboard.dictate.cloud.DictateCloudPack
+import dev.patrickgold.florisboard.dictate.provider.ProviderRegistry
 import dev.patrickgold.florisboard.dictate.ui.AudioReactiveCloudOrbView
 import dev.patrickgold.florisboard.dictate.ui.DictateAuroraOrbView
 import dev.patrickgold.florisboard.dictate.ui.DictateWaveform
@@ -1147,6 +1148,12 @@ internal val WHATS_NEW_TOURS: List<WhatsNewTourDef> = listOf(
     WhatsNewTourDef(VersionName(6, 3, 0), WhatsNewPages63),
     WhatsNewTourDef(VersionName(6, 4, 0), WhatsNewPages64),
 )
+    // The Credit-meter page advertises the paid credit service, which this fork does not offer —
+    // drop it here instead of editing it out of the 6.0 list, so an upstream merge has nothing to
+    // resolve and both auto-show and the About re-view lists go through these definitions.
+    .map { tour ->
+        tour.copy(pages = tour.pages.filter { ProviderRegistry.DICTATE_CLOUD_ENABLED || it.route != Routes.Settings.DictateCloud })
+    }
 
 /**
  * A full-screen, swipeable "What's new" tour. Auto-shows every tour a user hasn't seen yet (see

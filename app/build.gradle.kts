@@ -68,7 +68,12 @@ configure<ApplicationExtension> {
     }
 
     defaultConfig {
-        applicationId = "net.devemperor.dictate"
+        // This fork's application id — deliberately different from the upstream Play app
+        // (net.devemperor.dictate): the fork is sideloaded from GitHub Releases (see
+        // docs/fork-release.md), and a different id lets it install beside the Play app instead of
+        // replacing it. Code paths that know both ids by hand: RestoreScreen (backup vendor check)
+        // and DictateLegacyPreferences (old prefs file).
+        applicationId = "tw.ensky.dictate"
         minSdk = projectMinSdk.toInt()
         targetSdk = projectTargetSdk.toInt()
         versionCode = projectVersionCode.toInt()
@@ -112,11 +117,13 @@ configure<ApplicationExtension> {
 
     // Release signing. Credentials live in a local, untracked `keystore.properties` at the repo root
     // (see keystore.properties.template) so the keystore/passwords never get committed. When the file
-    // is absent (e.g. on CI without secrets, or a contributor's machine) the release build simply has
-    // no signing config attached and falls back to an unsigned build, exactly as before.
+    // is absent (e.g. a contributor's machine) the release build simply has no signing config attached
+    // and falls back to an unsigned build, exactly as before.
     //
-    // IMPORTANT: For uploads to Google Play this must be the *upload key* the existing
-    // net.devemperor.dictate listing expects (the old Java app's key) — a fresh key gets rejected.
+    // IMPORTANT: This fork signs with its OWN key — the upstream Play upload key is not available
+    // here, and the fork ships no Play listing: users sideload the APK from GitHub Releases (Obtainium,
+    // see docs/fork-release.md), where the app id is the only identity. CI writes this file from repo
+    // secrets; losing the keystore means users can never delta-update again, so keep release.jks safe.
     val keystorePropsFile = rootProject.file("keystore.properties")
     val keystoreProps = if (keystorePropsFile.exists()) {
         Properties().apply { keystorePropsFile.inputStream().use { load(it) } }
