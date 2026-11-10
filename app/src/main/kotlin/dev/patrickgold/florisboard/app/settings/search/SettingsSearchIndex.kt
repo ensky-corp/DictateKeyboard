@@ -14,6 +14,7 @@ import androidx.annotation.StringRes
 import dev.patrickgold.florisboard.R
 import dev.patrickgold.florisboard.app.Routes
 import dev.patrickgold.florisboard.app.settings.dictionary.UserDictionaryType
+import dev.patrickgold.florisboard.dictate.provider.ProviderRegistry
 
 /**
  * One searchable settings entry (issue #187). GENERATED from the settings screens by
@@ -37,7 +38,9 @@ data class SettingsSearchEntry(
 )
 
 object SettingsSearchIndex {
-    val entries: List<SettingsSearchEntry> = listOf(
+    // Property order matters: [entries] filters [baseEntries] as the object initialises, so the raw
+    // list has to be declared first.
+    private val baseEntries: List<SettingsSearchEntry> = listOf(
         SettingsSearchEntry(R.string.about__title, R.string.about__title, Routes.Settings.About),
         SettingsSearchEntry(R.string.backup_and_restore__back_up__title, R.string.backup_and_restore__back_up__title, Routes.Settings.Backup, parentRes = R.string.settings__other__title),
         SettingsSearchEntry(R.string.settings__other__title, R.string.settings__other__title, Routes.Settings.Other),
@@ -396,4 +399,13 @@ object SettingsSearchIndex {
         SettingsSearchEntry(R.string.pref__spelling__use_udm_entries__label, R.string.settings__typing__title, Routes.Settings.Typing, anchor = "pref__spelling__use_udm_entries__label"),
         SettingsSearchEntry(R.string.settings__dictionary__title, R.string.settings__typing__title, Routes.Settings.Typing, anchor = "settings__dictionary__title"),
     )
+
+    /**
+     * The entries search actually sees. This fork does not offer the paid credit service, so its
+     * entries never exist for a query to find: the route survives (spec'ed unreachable), the
+     * search results do not.
+     */
+    val entries: List<SettingsSearchEntry> = baseEntries.filterNot {
+        !ProviderRegistry.DICTATE_CLOUD_ENABLED && it.route == Routes.Settings.DictateCloud
+    }
 }

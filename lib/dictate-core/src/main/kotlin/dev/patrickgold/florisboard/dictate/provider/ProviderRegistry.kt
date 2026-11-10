@@ -134,6 +134,13 @@ data class ProviderPreset(
  */
 object ProviderRegistry {
 
+    /**
+     * This fork does not offer the paid credit service: [CLOUD] stays defined (its id is referenced
+     * across the codebase) but is kept out of [presets], so it is not engraved anywhere a user can
+     * reach and lookups by its id fall through to the callers' non-cloud fallbacks.
+     */
+    const val DICTATE_CLOUD_ENABLED = false
+
     private val CHAT_ONLY = ProviderCapabilities(chat = true, transcription = false)
     private val CHAT_AND_STT = ProviderCapabilities(chat = true, transcription = true)
     private val STT_ONLY = ProviderCapabilities(chat = false, transcription = true)
@@ -926,12 +933,23 @@ object ProviderRegistry {
         curatedTranscriptionModels = listOf("whisper-base", "whisper-tiny"),
     )
 
-    /** All built-in presets in display order. The custom option is added by the UI on top of these. */
-    val presets: List<ProviderPreset> = listOf(
-        CLOUD, OPENAI, GROQ, OPENROUTER, GEMINI, ANTHROPIC, TOGETHER, DEEPINFRA, MISTRAL, SONIOX,
-        ELEVENLABS, DEEPGRAM, ASSEMBLYAI, AZURE, XAI, DEEPSEEK, SILICONFLOW, SCALEWAY, OVHCLOUD,
-        OLLAMA, LOCAL,
-    )
+    /**
+     * All built-in presets in display order. The custom option is added by the UI on top of these.
+     *
+     * [DICTATE_CLOUD_ENABLED] is a `const`, so the branch folds at compile time. [CLOUD] itself stays
+     * defined because its id is referenced across the codebase and stored accounts may still carry
+     * it — but [byId] reads this list, so it resolves like any unknown id: to the caller's fallback.
+     */
+    val presets: List<ProviderPreset> =
+        if (DICTATE_CLOUD_ENABLED) listOf(
+            CLOUD, OPENAI, GROQ, OPENROUTER, GEMINI, ANTHROPIC, TOGETHER, DEEPINFRA, MISTRAL, SONIOX,
+            ELEVENLABS, DEEPGRAM, ASSEMBLYAI, AZURE, XAI, DEEPSEEK, SILICONFLOW, SCALEWAY, OVHCLOUD,
+            OLLAMA, LOCAL,
+        ) else listOf(
+            OPENAI, GROQ, OPENROUTER, GEMINI, ANTHROPIC, TOGETHER, DEEPINFRA, MISTRAL, SONIOX,
+            ELEVENLABS, DEEPGRAM, ASSEMBLYAI, AZURE, XAI, DEEPSEEK, SILICONFLOW, SCALEWAY, OVHCLOUD,
+            OLLAMA, LOCAL,
+        )
 
     fun byId(id: String): ProviderPreset? = presets.firstOrNull { it.id == id }
 

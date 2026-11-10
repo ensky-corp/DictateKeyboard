@@ -14,6 +14,7 @@ import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
@@ -32,7 +33,10 @@ class ModelCatalogTest : FunSpec({
 
     test("every shipped provider has an entry, apart from those whose models are the user's") {
         presets.map { it.id }.filter { it !in ModelCatalog.providerIds }.shouldBeEmpty()
-        (ModelCatalog.providerIds - ProviderRegistry.presets.map { it.id }.toSet()).shouldBeEmpty()
+        // The cloud preset leaves [ProviderRegistry.presets] on this fork ([DICTATE_CLOUD_ENABLED]) while
+        // its catalog entry stays, as the catalog is read by stored accounts as well as by presets.
+        (ModelCatalog.providerIds - ProviderRegistry.presets.map { it.id }.toSet())
+            .shouldContainExactly(listOf(ProviderRegistry.CLOUD.id))
     }
 
     test("every model a preset offers has an entry with the role it is offered for") {

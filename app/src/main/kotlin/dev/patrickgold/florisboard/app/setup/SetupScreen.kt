@@ -832,15 +832,19 @@ private fun FlorisStepLayoutScope.ProviderChoice(
     StepText(stringRes(R.string.setup__provider__choose_intro))
     Spacer(modifier = Modifier.height(16.dp))
 
-    ChoiceCard(
-        title = stringRes(R.string.setup__provider__choice_cloud_title),
-        body = stringRes(R.string.setup__provider__choice_cloud_body),
-        buttonLabel = stringRes(R.string.setup__provider__choice_cloud_btn),
-        onClick = onChooseCloud,
-        // One mark, because this is one service.
-        marks = listOf(ProviderRegistry.CLOUD.id),
-    )
-    Spacer(modifier = Modifier.height(12.dp))
+    // This fork does not offer the paid credit service, so its card is not shown; the choice the
+    // step still makes is which provider to bring a key for.
+    if (ProviderRegistry.DICTATE_CLOUD_ENABLED) {
+        ChoiceCard(
+            title = stringRes(R.string.setup__provider__choice_cloud_title),
+            body = stringRes(R.string.setup__provider__choice_cloud_body),
+            buttonLabel = stringRes(R.string.setup__provider__choice_cloud_btn),
+            onClick = onChooseCloud,
+            // One mark, because this is one service.
+            marks = listOf(ProviderRegistry.CLOUD.id),
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+    }
     ChoiceCard(
         title = stringRes(R.string.setup__provider__choice_own_title),
         body = stringRes(R.string.setup__provider__choice_own_body),

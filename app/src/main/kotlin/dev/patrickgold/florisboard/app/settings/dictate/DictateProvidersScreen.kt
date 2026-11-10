@@ -282,7 +282,9 @@ fun DictateProvidersScreen() = FlorisScreen {
             orderedPresets.forEach { preset ->
                 // Dictate Cloud has no API key to type in — it has a balance, packs and a recovery
                 // code — so its row opens its own screen instead of the credential editor.
-                if (preset.id == ProviderRegistry.CLOUD.id) {
+                // Ordered out of [ProviderRegistry.presets] on this fork already; the switch here is
+                // the explicit gate the row is named by.
+                if (ProviderRegistry.DICTATE_CLOUD_ENABLED && preset.id == ProviderRegistry.CLOUD.id) {
                     Preference(
                         // The service's own mark, like every other provider in this list — a
                         // generic cloud here is what the app uses for "an endpoint with no logo".

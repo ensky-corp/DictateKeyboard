@@ -34,7 +34,9 @@ class ProviderListingTest {
 
     @Test
     fun `a fresh install lists the two pinned providers and nothing else`() {
-        assertEquals(listOf(ProviderRegistry.CLOUD.id, ProviderRegistry.LOCAL.id), listed(accountsOf()))
+        // Ask by id rather than of [ProviderRegistry.CLOUD], which [ProviderRegistry.presets] does not
+        // list on this fork — pinned and listed agree there is nothing to set up to.
+        assertEquals(listOf(ProviderRegistry.LOCAL.id), listed(accountsOf()))
     }
 
     @Test
@@ -83,14 +85,21 @@ class ProviderListingTest {
         assertTrue(ProviderListing.isPickable(openai, accounts, selectedId = openai.id, nothingInstalled))
     }
 
-    // Pinned is about the providers screen: a picker still offers Dictate Cloud only once there is credit.
+    // This fork does not offer the credit service (ProviderRegistry.DICTATE_CLOUD_ENABLED), so its preset
+    // stays out of [ProviderRegistry.presets]: not listed even though [ProviderListing.pinnedIds] knows
+    // the id, because nothing lists it for anything to pin.
     @Test
-    fun `Dictate Cloud is always listed but only pickable with a wallet`() {
+    fun `Dictate Cloud is neither listed nor offered on this fork`() {
         val cloud = ProviderRegistry.CLOUD
-        assertTrue(ProviderListing.isListed(cloud, accountsOf(), emptySet(), nothingInstalled))
-        assertFalse(ProviderListing.isPickable(cloud, accountsOf(), selectedId = "", nothingInstalled))
+        assertTrue(cloud.id !in ProviderRegistry.presets.map { it.id })
+        assertFalse(ProviderListing.isListed(cloud, accountsOf(), emptySet(), nothingInstalled))
+        // Not even the holder of a wallet carried over from an update gets it back into
+        // transcriptionChoices: an account alone is not a preset, so no preset anywhere lists it.
         val funded = accountsOf(ProviderAccount(providerId = cloud.id, apiKey = "wallet-token"))
-        assertTrue(ProviderListing.isPickable(cloud, funded, selectedId = "", nothingInstalled))
+        assertFalse(
+            ProviderListing.transcriptionChoices(funded, selectedId = cloud.id, isModelInstalled = nothingInstalled)
+                .any { it.first == cloud.id },
+        )
     }
 
     // Issue #431: the keyboard's picker and the settings dialog offer one and the same list.
