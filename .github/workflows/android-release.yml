@@ -1,0 +1,146 @@
+name: Android release
+
+# CI for this fork. Pull requests get a compile + unit-test pass with no signing (write access to
+# release secrets is not something to bet PR contexts on). Pushes of ensky-v* tags and manual runs
+# build the signed release APK: on a tag push it is attached to a GitHub Release — which is what
+# Obtainium users point at (docs/fork-release.md) — and a manual run leaves it as a workflow
+# artifact instead of publishing anything.
+#
+# Two build inputs are deliberately not committed (see .gitignore: /app/libs/, /app/src/main/jniLibs/):
+# the vendored sherpa-onnx libraries, fetched by tools/fetch-sherpa-onnx.sh, and the Bergamot
+# translation engine, built on the runner by tools/bergamot/build-android.sh. `assemble*` fails the
+# preBuild stage without them, so both run on every trigger — a PR whose change breaks something
+# there still shows up as red, not as only-releases-broken.
+on:
+  pull_request:
+  push:
+    tags:
+      - "ensky-v*"
+  workflow_dispatch:
+
+permissions:
+  # contents: write is here for `gh release create` on tag pushes; pull_request runs are read-only
+  # regardless (GitHub enforces that for tokens on PR events), so a PR cannot publish.
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # AGP 9 requires at least JDK 17 to run (the pinned jdk in gradle/tools.versions.toml matches);
+      # the Kotlin/JNI code itself targets Java 11. Gradle 9.4 reads this fine.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The names come from gradle/tools.versions.toml, gradle/libs.versions.toml (compileSdk 36,
+      # buildTools 36.0.0, ndk 29.0.14206865, cmake 4.1.2) and gradle.properties. Every one is
+      # listed explicitly because the image swaps its preinstalled versions over time, and the
+      # Bergamot build refuses to run against a different CMake/NDK pair.
+      - name: Install the pinned Android SDK components
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;29.0.14206865" \
+            "cmake;4.1.2"
+
+      # gitignored build artifact from the pinned sherpa-onnx release; see tools/fetch-sherpa-onnx.sh
+      # for what it downloads and what checksums pin it.
+      - name: Fetch the vendored sherpa-onnx libraries
+        run: tools/fetch-sherpa-onnx.sh
+
+      # No published prebuilt binary exists, so it is compiled on the runner (a few minutes), arm64
+      # only: that is the one ABI the app build's verifyBergamotLib check demands.
+      - name: Build the Bergamot translation engine (arm64-v8a)
+        run: tools/bergamot/build-android.sh arm64-v8a
+
+      # Pull requests: compile the app in its debug variant (the release variant is unsigned without
+      # the keystore, and no release signing is invited into PR contexts) and run the unit tests.
+      # Only the tasks of :app are named: Gradle then builds just :app and the lib/* modules it
+      # depends on — :wear is not included. There is no benchmark module either: "benchmark" is a
+      # buildType of :app, never a project in settings.gradle.kts.
+      - name: Compile and unit-test (pull requests)
+        if: github.event_name == 'pull_request'
+        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest
+
+      - name: Prepare release signing
+        if: github.event_name != 'pull_request'
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for var in SIGNING_KEYSTORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
+            [ -n "${!var}" ] || missing+=("$var")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Release secrets not set (missing: ${missing[*]}). How to create them: see docs/fork-release.md."
+            exit 1
+          fi
+          # The keystore is decoded OUTSIDE the repo ($RUNNER_TEMP is never committed) and the
+          # properties file points at the absolute temp path: gradle's rootProject.file() resolves a
+          # relative storeFile against the repo root, which is the wrong place for a runner-local
+          # file. keystore.properties itself is gitignored. No secret is ever echoed — only their
+          # names, in the failure message above.
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$RUNNER_TEMP/release.jks" "$SIGNING_STORE_PASSWORD" "$SIGNING_KEY_ALIAS" "$SIGNING_KEY_PASSWORD" \
+            > keystore.properties
+
+      - name: Build the signed release APK
+        if: github.event_name != 'pull_request'
+        run: ./gradlew :app:assembleRelease
+
+      # assembleRelease without a signing config happily produces app-release-unsigned.apk; this
+      # assert keeps a broken secret setup from shipping an unsigned APK onto a tag. It prints the
+      # certificate chain so the log shows which key was actually used.
+      - name: Verify the APK is signed
+        if: github.event_name != 'pull_request'
+        run: |
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          for apk in app/build/outputs/apk/release/*.apk; do
+            [ -s "$apk" ] || { echo '::error::No release APK was produced.'; exit 1; }
+            case "$apk" in
+              *-unsigned.apk)
+                echo '::error::The release APK is not signed — the release signing config did not attach.'
+                exit 1 ;;
+            esac
+            "$apksigner" verify --print-certs "$apk"
+          done
+
+      - name: Rename the APK for its release
+        if: github.event_name != 'pull_request'
+        run: |
+          # versionName, without the "-suffix" gradle.properties can append (versionName it feeds the
+          # manifest with is substringBefore("-)).
+          version="$(grep '^projectVersionName=' gradle.properties | cut -d= -f2 | cut -d- -f1)"
+          # workflow_dispatch runs on a branch name, which may contain slashes; tags never do.
+          ref="${GITHUB_REF_NAME//\//-}"
+          mv app/build/outputs/apk/release/*.apk "dictate-${version}-${ref}.apk"
+
+      - name: Create the GitHub Release (tag pushes)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dictate-*.apk \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Signed release APK. Update through Obtainium or install directly — see [docs/fork-release.md](docs/fork-release.md)."
+
+      - name: Upload the APK as a workflow artifact (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dictate-release-apk
+          path: dictate-*.apk
+          if-no-files-found: error
